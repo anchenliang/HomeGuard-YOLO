@@ -11,6 +11,7 @@ import logging
 from queue import Queue
 import os
 from pathlib import Path
+import json   
 
 # 创建必要的目录
 def create_directories():
@@ -598,20 +599,42 @@ def main():
     print("=" * 50)
     print("北京出租屋安全监控系统启动")
     print("=" * 50)
-    
-    # =========== 配置部分 ===========
+
+    # =========== 从 config.json 读取邮箱配置 ===========
+    config_file = Path('config.json')
+    if not config_file.exists():
+        print("错误：未找到 config.json 配置文件，请参照说明创建。")
+        print("程序退出。")
+        return
+
+    try:
+        with open(config_file, 'r', encoding='utf-8') as f:
+            config_data = json.load(f)
+    except Exception as e:
+        print(f"读取 config.json 失败：{e}")
+        return
+
+    # 检查必要字段
+    required_fields = ['sender_email', 'sender_password', 'receiver_emails']
+    for field in required_fields:
+        if field not in config_data:
+            print(f"错误：config.json 中缺少必要字段 '{field}'")
+            return
+
+    # 构建 email_config
     email_config = {
-        'smtp_server': 'smtp.qq.com',  # QQ邮箱SMTP服务器
-        'smtp_port': 465,              # SSL端口
-        'sender_email': '你的邮箱',     # 发件人邮箱（推荐使用qq邮箱）
-        'sender_password': '你的授权码',  # 授权码
-        # 多个收件人邮箱（列表形式）
-        'receiver_emails': [
-            '收件人1邮箱',
-            '收件人2邮箱'
-        ]
+        'smtp_server': config_data.get('smtp_server', 'smtp.qq.com'),
+        'smtp_port': config_data.get('smtp_port', 465),
+        'sender_email': config_data['sender_email'],
+        'sender_password': config_data['sender_password'],
+        'receiver_emails': config_data['receiver_emails']   # 应为列表
     }
-    
+
+    # 确保 receiver_emails 是列表
+    if not isinstance(email_config['receiver_emails'], list):
+        print("错误：config.json 中 receiver_emails 必须是列表形式，例如 [\"邮箱1\", \"邮箱2\"]")
+        return
+
     print("\n跳过邮箱配置测试，直接启动系统...")
     print("注意：程序启动后1分钟发送首次环境自检邮件")
     print("此后每隔12小时发送一次环境自检邮件")
@@ -619,32 +642,33 @@ def main():
     print(f"收件人: {', '.join(email_config['receiver_emails'])}")
     print("\n按回车键继续，或按Ctrl+C退出")
     input()
-    
+
     print("\n正在启动摄像头...")
-    
+
     # 摄像头索引
     camera_index = 0  # 默认摄像头
-    
+
     # YOLOv8模型路径
     model_path = 'yolov8n.pt'
-    
+
     # 如果模型不存在，尝试下载
     if not os.path.exists(model_path):
         print(f"模型文件 {model_path} 不存在，尝试下载...")
         try:
+            from ultralytics import YOLO
             model = YOLO('yolov8n.pt')
             print("模型下载成功")
         except Exception as e:
             print(f"模型下载失败: {e}")
             print("请手动下载模型或检查网络连接")
             return
-    
+
     # 创建并启动监控系统
     print("\n启动监控系统...")
     print(f"图片保存目录: {Path('pic').absolute()}")
     print(f"日志文件: {Path('log') / 'security_monitor.log'}")
     print("=" * 50)
-    
+
     monitor = SecurityMonitor(email_config, camera_index, model_path)
     monitor.start()
 
