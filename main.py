@@ -11,7 +11,9 @@ import logging
 from queue import Queue
 import os
 from pathlib import Path
-import json   
+import json
+import ctypes  # 新增：用于禁用控制台快速编辑模式
+import sys    # 新增：用于平台判断
 
 # 创建必要的目录
 def create_directories():
@@ -36,6 +38,28 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+# ---------- 新增：禁用控制台快速编辑模式 ----------
+def disable_console_quick_edit():
+    """
+    禁用Windows控制台的快速编辑模式，防止用户点击窗口导致程序暂停。
+    仅在 Windows 下生效，其他平台忽略。
+    """
+    if sys.platform != 'win32':
+        return
+    try:
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.GetStdHandle(-10)  # STD_INPUT_HANDLE
+        mode = ctypes.c_ulong()
+        if kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+            # 清除快速编辑模式（0x0040）和插入模式（0x0020）
+            new_mode = mode.value & ~0x0040 & ~0x0020
+            kernel32.SetConsoleMode(handle, new_mode)
+            print("✓ 已禁用控制台快速编辑模式，点击窗口不会暂停程序。")
+        else:
+            print("警告：无法获取控制台模式，快速编辑可能仍启用。")
+    except Exception as e:
+        print(f"警告：禁用快速编辑模式失败（不影响运行）: {e}")
 
 class SecurityMonitor:
     def __init__(self, email_config, camera_index=0, model_path='yolov8n.pt'):
@@ -596,6 +620,9 @@ class SecurityMonitor:
 
 
 def main():
+    # ---------- 新增：禁用控制台快速编辑模式 ----------
+    disable_console_quick_edit()
+    
     print("=" * 50)
     print("北京出租屋安全监控系统启动")
     print("=" * 50)
@@ -640,8 +667,7 @@ def main():
     print("此后每隔12小时发送一次环境自检邮件")
     print("检测到人时立即发送报警邮件（60秒冷却时间）")
     print(f"收件人: {', '.join(email_config['receiver_emails'])}")
-    print("\n按回车键继续，或按Ctrl+C退出")
-    input()
+    # 已移除“按回车键继续”的提示和 input() 调用，程序直接继续
 
     print("\n正在启动摄像头...")
 
